@@ -1,0 +1,53 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #222;
+  padding: 20px;
+  color: white;
+}
+
+.App-title {
+  font-size: 1.5em;
+}
+
+.App-intro {
+  font-size: large;
+}
+
+button {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  cursor: pointer;
+  margin: auto 5px;
+  vertical-align: middle; 
+}
+
+input[type=text] {
+  margin: auto 5px;
+  display: inline-block;
+  border: 1px solid #ccc;
+  padding: 15px;
+  vertical-align: middle;
+  font-size: 16px;
+}
+
+.divider {
+  border-style: groove;
+  width: auto;
+  margin: auto;
+  margin-top: 30px;
+}
+
+.react-json-view {
+  text-align: initial;
+  max-width: 900px;
+  margin: auto;
+}
