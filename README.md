@@ -58,8 +58,9 @@ Ingredient used to make this system:
 *Response Payload:* A list of all recent played matches is returned.
 
 ## Front end React UI component provided
+An interface to view the JSON payload message when interacting with the API services.
 
-[alt text](/React_App.png)
+![alt text](/React_App.png)
 
 TODO:
 1. To host it live in Heroku/AWS.
