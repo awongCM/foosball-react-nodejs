@@ -1,12 +1,12 @@
 class Player {
-  constructor(id, name, winratio) {
+  constructor(id, name, winratio, wins = 0, losses = 0) {
     this._id = id;
     this._name = name;
     this._winratio = winratio;
-
-    console.log('Player object initialized');
+    this._wins = wins;
+    this._losses = losses;
   }
-  
+
   getID() {
     return this._id;
   }
@@ -27,7 +27,21 @@ class Player {
     return this._winratio;
   }
 
+  getWins() {
+    return this._wins;
+  }
+
+  getLosses() {
+    return this._losses;
+  }
+
+  recordWin() {
+    this._wins += 1;
+  }
+
+  recordLoss() {
+    this._losses += 1;
+  }
 }
 
-// export the class
 module.exports = Player;

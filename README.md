@@ -1,75 +1,73 @@
 # foosball-react-nodejs
 
-Foosball Ranking System written entirely in NodeJS/React
+Foosball ranking system for tracking 2v2 office matches with Elo-style ratings.
 
-Ingredient used to make this system:
-* NodeJS
-* ExpressJS (for API JSON request/response)
-* React
-* Elo-rank
-* UUID
-* POJOs
-* YARN/NPM
+## Stack
 
-## Instructons to setup and run
-1. Download the repo.
-2. Navigate to the project root folder, run `npm install` or `npm i`.
-3. To start up API webserice, type `yarn start`.
-4. To serve front end app, type `yarn serve`.
+- Node.js + Express API
+- React frontend
+- SQLite persistence (`better-sqlite3`)
+- Elo rating calculations via `elo-rank`
 
-## Backend API endpoints provided
+## Local development
 
-### 1. `players` with get/post verbs.
+1. Install dependencies:
 
-#### GET with no request body.
-*Response Payload:* A list of all players is returned.
-
-#### POST with the following request body.
-
+```bash
+npm install
 ```
-{
-  "name": <player name>
-}
+
+2. Start the API (port 3000):
+
+```bash
+npm run dev:server
 ```
-*Response Payload:* A new player is successfully entered in the system.
 
-### 2. `game` with post verb.
+3. In another terminal, start the React dev server (port 8080):
 
-#### POST with the following request body.
-
+```bash
+npm run dev:client
 ```
-{
-  "winners": [
-    <player 1 name>,
-    <player 2 name>,
-  ],
-  "losers": [
-    <player 3 name>,
-    <player 4 name>,
-  ]
-}
+
+Open `http://localhost:8080`. The React dev server proxies API requests to port 3000.
+
+Local SQLite data is stored at `./data/foosball.db`.
+
+## Production build
+
+```bash
+npm run build
+NODE_ENV=production npm start
 ```
-*Response Payload:* A new match with paired opponents is created; and their respective opponents' win ratios are calculated and returned.
 
-### 3. `matches` with get verbs.
+The Express server serves the React build and API on one port.
 
-#### GET with no request body.
+## API endpoints
 
-*Response Payload:* A list of all recent played matches is returned.
+- `GET /api/health` — health check
+- `GET /api/players` — list players (sorted by rating)
+- `POST /api/players` — add a player `{ "name": "Alice" }`
+- `POST /api/game` — log a match `{ "winners": ["Alice", "Bob"], "losers": ["Charlie", "Dave"] }`
+- `GET /api/matches` — list match history
 
-## Front end React UI component provided
-An interface to view the JSON payload message when interacting with the API services.
+## Deploy to Render
 
-![alt text](/React_App.png)
+This repo includes a [`render.yaml`](render.yaml) Blueprint with:
 
-## TODO:
-1. To host it live in Heroku/AWS.
-2. Use a graph API to display matches over time.
-3. Replace the UI json viewer object with more useful actual form input fields.
+- One web service (API + React static build)
+- Persistent disk mounted at `/data` for SQLite
 
-### References
-For more information on how players ranking are determined during the games.
+Connect the repo in the Render Dashboard and apply the Blueprint, or run:
 
-https://www.npmjs.com/package/elo-rank
+```bash
+render blueprints validate render.yaml
+```
 
-https://en.wikipedia.org/wiki/Elo_rating_system
+## Rating system
+
+Player ratings use the [Elo rating system](https://en.wikipedia.org/wiki/Elo_rating_system). New players start at 1000. Team ratings are averaged before calculating the match delta.
+
+References:
+
+- https://www.npmjs.com/package/elo-rank
+- https://en.wikipedia.org/wiki/Elo_rating_system

@@ -1,125 +1,126 @@
-const express = require('express'),
-      router = express.Router(), 
-      uuid = require('uuid/v1');
-      WINRATIO_DEFAULT = 1000; //give all new players their default win ratios
-      
+const express = require('express');
+const router = express.Router();
+const uuid = require('uuid/v1');
+
 const Match = require('../core/Match');
 const Player = require('../core/Player');
 const Game = require('../core/Game');
-const FoosballRatingCalculator = require('../libs/FoosballRatingCalculator');
+const { serializePlayer, serializeMatch } = require('../serializers');
 
-// initializes these classes
-const newGame = new Game();
-const newFoosballRatingCalculator = new FoosballRatingCalculator();
+const WINRATIO_DEFAULT = 1000;
+const game = new Game();
 
-// main endpoint
+router.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 router.get('/', (req, res) => {
-  res.status(200).json({message: "Let the foosball game commence!"});
+  res.status(200).json({ message: 'Let the foosball game commence!' });
 });
 
-//retrieve all players
 router.get('/players', (req, res) => {
-  
-  let playerArr = [];
-  playerArr = newGame.getPlayersList();
+  const players = game.getPlayersList();
 
   res.status(200).json({
-    message: 'Number of total players: ' + playerArr.length,
+    message: `Number of total players: ${players.length}`,
     payload: {
-      players: playerArr
+      players: players.map(serializePlayer)
     }
   });
 });
 
-// Add new players
 router.post('/players', (req, res) => {
-  console.log('new player added');
+  const name = (req.body.name || '').trim();
 
-  const name = req.body.name;
+  if (!name) {
+    res.status(400).json({ message: 'Player name is required' });
+    return;
+  }
+
+  if (game.findPlayerByName(name)) {
+    res.status(409).json({ message: 'A player with that name already exists' });
+    return;
+  }
+
   const winratio = req.body.winratio ? req.body.winratio : WINRATIO_DEFAULT;
+  const newPlayer = new Player(uuid(), name, winratio);
 
-  // generate globally unique identifier 
-  const id = uuid();
+  game.addNewPlayer(newPlayer);
 
-  const newPlayer = new Player(id, name, winratio);
-
-  newGame.addNewPlayer(newPlayer);
-
-  res.status(200).json({
+  res.status(201).json({
     message: 'New player added',
-    payload: {
-      id: newPlayer.getID(),
-      name: newPlayer.getName(),
-      winratio: newPlayer.getWinRatio()
-    }
+    payload: serializePlayer(newPlayer)
   });
 });
 
-//Calculate win ratios between opponents of a match
 router.post('/game', (req, res) => {
+  const winnernames = req.body.winners || [];
+  const losernames = req.body.losers || [];
 
-  const winnernames = req.body.winners;
-  const losernames = req.body.losers;
-  let playersArr = newGame.getPlayersList();
-
-  if (playersArr.length === 0 ) {
-    res.status(401).json({message: 'Cannot determine the match ratings at this time'});
+  if (!Array.isArray(winnernames) || !Array.isArray(losernames)) {
+    res.status(400).json({ message: 'Winners and losers must be arrays of player names' });
     return;
   }
 
-  const winnersFound = winnernames.map(name => playersArr.find((player)=> { return player.getName() === name;}) );
-  const losersFound = losernames.map(name => playersArr.find((player)=> { return player.getName() === name;}) ) ;
-
-  if(winnersFound === undefined  || losersFound === undefined) {
-    res.status(401).json({message: "Cannot determine the match ratings due to unavailable player data"});
+  if (winnernames.length === 0 || losernames.length === 0) {
+    res.status(400).json({ message: 'Each team must have at least one player' });
     return;
   }
 
-  const players = {winners: winnersFound, losers: losersFound};
-  let payload = newGame.handleXMatches(players);
-    
-  const newMatch = constructMatchObj(payload);
+  if (game.getPlayersList().length === 0) {
+    res.status(400).json({ message: 'Cannot determine the match ratings at this time' });
+    return;
+  }
 
-  newGame.addRecentMatches(newMatch);
+  const winnersFound = winnernames.map((name) => game.findPlayerByName(name.trim()));
+  const losersFound = losernames.map((name) => game.findPlayerByName(name.trim()));
 
-  res.status(201).json(constructResponseMatchJSON(newMatch));
+  const missingWinners = winnernames.filter((name, index) => !winnersFound[index]);
+  const missingLosers = losernames.filter((name, index) => !losersFound[index]);
+
+  if (missingWinners.length > 0 || missingLosers.length > 0) {
+    res.status(400).json({
+      message: 'Cannot determine the match ratings due to unavailable player data',
+      missingPlayers: [...missingWinners, ...missingLosers]
+    });
+    return;
+  }
+
+  const allSelected = [...winnersFound, ...losersFound];
+  const uniqueIds = new Set(allSelected.map((player) => player.getID()));
+
+  if (uniqueIds.size !== allSelected.length) {
+    res.status(400).json({ message: 'Each player can only appear once in a match' });
+    return;
+  }
+
+  const payload = game.handleXMatches({ winners: winnersFound, losers: losersFound });
+  const newMatch = new Match(
+    uuid(),
+    payload.date,
+    payload.delta,
+    payload.probability,
+    payload.winners,
+    payload.losers
+  );
+
+  game.addRecentMatch(newMatch);
+
+  res.status(201).json({
+    message: 'Match ratings updated',
+    payload: serializeMatch(newMatch)
+  });
 });
 
-// Retrieve all matches
 router.get('/matches', (req, res) => {
-  let matchArr = [];
-
-  matchArr = newGame.getMatchesList();
+  const matches = game.getMatchesList();
 
   res.status(200).json({
-    message: 'Number of total matches played so far: ' + matchArr.length,
+    message: `Number of total matches played so far: ${matches.length}`,
     payload: {
-      matches: matchArr
+      matches: matches.map(serializeMatch)
     }
   });
 });
-
-
-// Helper methods for Match data
-function constructMatchObj(payload) {
-  // generate globally unique identifier 
-  const id = uuid();
-
-  return new Match(id, payload.date, payload.delta, payload.probability, payload.winners, payload.losers);
-}
-
-function constructResponseMatchJSON(newMatch) {
-  return {
-    message: 'Match ratings updated', 
-    payload: {
-      id: newMatch.getID(),
-      date: newMatch.getDateOfEntry(),
-      delta: newMatch.getDelta(),
-      probablity: newMatch.getProbability(),
-      winners: newMatch.getWinners(),
-      losers: newMatch.getLosers()
-    } 
-  };
-}
 
 module.exports = router;

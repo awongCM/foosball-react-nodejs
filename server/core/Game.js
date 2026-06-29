@@ -1,65 +1,62 @@
-// import the libraries
 const FoosballRatingCalculator = require('../libs/FoosballRatingCalculator');
-const newFoosballRatingCalculator = new FoosballRatingCalculator();
+const playerRepo = require('../db/playerRepo');
+const matchRepo = require('../db/matchRepo');
+
+const ratingCalculator = new FoosballRatingCalculator();
 
 class Game {
-  constructor() {
-    this._playersArr = [];
-    this._matchesArr = [];
-
-    console.log('Game object initialized');
-  }
-
-  // For more infomation on determine player win ratio algorithm rankings, check this page out:
-  // https://en.wikipedia.org/wiki/Elo_rating_system
   handleXMatches(players) {
     const winners = players.winners;
     const losers = players.losers;
-    console.log("Winners: ", winners);
-    console.log("Losers: ", losers);
 
-    const winnersElo = newFoosballRatingCalculator.calculateAverageElo(winners);
-    const losersElo = newFoosballRatingCalculator.calculateAverageElo(losers);
+    const winnersElo = ratingCalculator.calculateAverageElo(winners);
+    const losersElo = ratingCalculator.calculateAverageElo(losers);
 
-    const delta = Math.round(newFoosballRatingCalculator.getExpectedScore(winnersElo, losersElo) / winners.length);
+    const delta = Math.round(ratingCalculator.getExpectedScore(winnersElo, losersElo) / winners.length);
+    const probability = 1 - ratingCalculator.getExpectedScore(winnersElo, losersElo, 1);
 
-    const probability = 1 - newFoosballRatingCalculator.getExpectedScore(winnersElo, losersElo, 1);
-
-    winners.map((winner)=> {
-      const updatedWinRatio = newFoosballRatingCalculator.calculatePlayerWinRatio(winner.getWinRatio(), delta, 1);
-      return winner.updateWinRatio(updatedWinRatio);
+    winners.forEach((winner) => {
+      const updatedWinRatio = ratingCalculator.calculatePlayerWinRatio(winner.getWinRatio(), delta, 1);
+      winner.updateWinRatio(updatedWinRatio);
+      winner.recordWin();
+      playerRepo.update(winner);
     });
 
-    losers.map((loser)=> {
-      const updatedWinRatio = newFoosballRatingCalculator.calculatePlayerWinRatio(loser.getWinRatio(), delta, 0);
-      return loser.updateWinRatio(updatedWinRatio);
+    losers.forEach((loser) => {
+      const updatedWinRatio = ratingCalculator.calculatePlayerWinRatio(loser.getWinRatio(), delta, 0);
+      loser.updateWinRatio(updatedWinRatio);
+      loser.recordLoss();
+      playerRepo.update(loser);
     });
 
     return {
-      winners: winners,
-      losers: losers,
-      delta: delta,
-      probability: probability,
+      winners,
+      losers,
+      delta,
+      probability,
       date: new Date()
     };
   }
 
   addNewPlayer(newPlayer) {
-    this._playersArr.push(newPlayer);
+    playerRepo.insert(newPlayer);
   }
 
-  addRecentMatches(recentMatch) {
-    this._matchesArr.push(recentMatch);
+  addRecentMatch(recentMatch) {
+    matchRepo.insertMatch(recentMatch);
   }
 
   getMatchesList() {
-    return this._matchesArr;
+    return matchRepo.findAll();
   }
 
   getPlayersList() {
-    return this._playersArr;
+    return playerRepo.findAll();
   }
 
+  findPlayerByName(name) {
+    return playerRepo.findByName(name);
+  }
 }
 
 module.exports = Game;
