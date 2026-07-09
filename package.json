@@ -14,7 +14,6 @@
   "license": "MIT",
   "proxy": "http://localhost:3000/",
   "dependencies": {
-    "axios": "^0.21.4",
     "better-sqlite3": "^11.10.0",
     "body-parser": "^1.18.2",
     "elo-rank": "^1.0.3",

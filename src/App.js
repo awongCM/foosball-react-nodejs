@@ -1,12 +1,6 @@
 import React, { Component } from 'react';
-import axios from 'axios';
+import api from './api';
 import './App.css';
-
-const api = axios.create();
-
-if (process.env.REACT_APP_API_KEY) {
-  api.defaults.headers.common['x-api-key'] = process.env.REACT_APP_API_KEY;
-}
 
 const TABS = {
   LEADERBOARD: 'leaderboard',

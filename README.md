@@ -5,7 +5,7 @@ Foosball ranking system for tracking 2v2 office matches with Elo-style ratings.
 ## Stack
 
 - Node.js + Express API
-- React frontend
+- React frontend (uses native `fetch` for API calls)
 - SQLite persistence (`better-sqlite3`)
 - Elo rating calculations via `elo-rank`
 
