@@ -33,6 +33,12 @@ Open `http://localhost:8080`. The React dev server proxies API requests to port 
 
 Local SQLite data is stored at `./data/foosball.db`.
 
+## Tests
+
+```bash
+npm test
+```
+
 ## Production build
 
 ```bash
@@ -44,11 +50,20 @@ The Express server serves the React build and API on one port.
 
 ## API endpoints
 
-- `GET /api/health` — health check
+- `GET /api/health` — health check (includes database connectivity)
 - `GET /api/players` — list players (sorted by rating)
 - `POST /api/players` — add a player `{ "name": "Alice" }`
 - `POST /api/game` — log a match `{ "winners": ["Alice", "Bob"], "losers": ["Charlie", "Dave"] }`
 - `GET /api/matches` — list match history
+
+## Optional API protection
+
+Set `API_KEY` to require authentication on write routes (`POST /api/players`, `POST /api/game`). Send the key via:
+
+- `x-api-key: your-secret-key`, or
+- `Authorization: Bearer your-secret-key`
+
+When deploying the bundled React UI with auth enabled, also set `REACT_APP_API_KEY` to the same value at **build time** so the browser can submit matches. Read routes remain public. Leave both unset for local development.
 
 ## Deploy to Render
 
@@ -56,6 +71,7 @@ This repo includes a [`render.yaml`](render.yaml) Blueprint with:
 
 - One web service (API + React static build)
 - Persistent disk mounted at `/data` for SQLite
+- Optional `API_KEY` secret (set in the Render Dashboard)
 
 Connect the repo in the Render Dashboard and apply the Blueprint, or run:
 

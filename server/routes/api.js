@@ -5,19 +5,27 @@ const uuid = require('uuid/v1');
 const Player = require('../core/Player');
 const Game = require('../core/Game');
 const { serializePlayer, serializeMatch } = require('../serializers');
+const { checkDbHealth } = require('../db/db');
+const { requireApiKey } = require('../middleware/auth');
+const { handleRoute } = require('../middleware/errorHandler');
 
 const WINRATIO_DEFAULT = 1000;
 const game = new Game();
 
 router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  try {
+    checkDbHealth();
+    res.status(200).json({ status: 'ok', db: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', db: 'unavailable' });
+  }
 });
 
 router.get('/', (req, res) => {
   res.status(200).json({ message: 'Let the foosball game commence!' });
 });
 
-router.get('/players', (req, res) => {
+router.get('/players', handleRoute((req, res) => {
   const players = game.getPlayersList();
 
   res.status(200).json({
@@ -26,9 +34,9 @@ router.get('/players', (req, res) => {
       players: players.map(serializePlayer)
     }
   });
-});
+}));
 
-router.post('/players', (req, res) => {
+router.post('/players', requireApiKey, handleRoute((req, res) => {
   const name = (req.body.name || '').trim();
 
   if (!name) {
@@ -41,18 +49,22 @@ router.post('/players', (req, res) => {
     return;
   }
 
-  const winratio = req.body.winratio ? req.body.winratio : WINRATIO_DEFAULT;
-  const newPlayer = new Player(uuid(), name, winratio);
+  const winratio = parseWinRatio(req.body.winratio);
+  if (winratio === null) {
+    res.status(400).json({ message: 'winratio must be a number between 0 and 3000' });
+    return;
+  }
 
+  const newPlayer = new Player(uuid(), name, winratio);
   game.addNewPlayer(newPlayer);
 
   res.status(201).json({
     message: 'New player added',
     payload: serializePlayer(newPlayer)
   });
-});
+}));
 
-router.post('/game', (req, res) => {
+router.post('/game', requireApiKey, handleRoute((req, res) => {
   const winnernames = req.body.winners || [];
   const losernames = req.body.losers || [];
 
@@ -99,9 +111,9 @@ router.post('/game', (req, res) => {
     message: 'Match ratings updated',
     payload: serializeMatch(newMatch)
   });
-});
+}));
 
-router.get('/matches', (req, res) => {
+router.get('/matches', handleRoute((req, res) => {
   const matches = game.getMatchesList();
 
   res.status(200).json({
@@ -110,6 +122,19 @@ router.get('/matches', (req, res) => {
       matches: matches.map(serializeMatch)
     }
   });
-});
+}));
+
+function parseWinRatio(value) {
+  if (value === undefined || value === null || value === '') {
+    return WINRATIO_DEFAULT;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 3000) {
+    return null;
+  }
+
+  return Math.round(parsed);
+}
 
 module.exports = router;

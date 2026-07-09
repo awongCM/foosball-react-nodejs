@@ -2,10 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/foosball.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db;
+let activeDbPath;
+
+function getDbPath() {
+  return process.env.DB_PATH || path.join(__dirname, '../../data/foosball.db');
+}
 
 function migrate(database) {
   const columns = database.prepare('PRAGMA table_info(match_players)').all();
@@ -27,12 +31,21 @@ function migrate(database) {
 }
 
 function getDb() {
+  const dbPath = getDbPath();
+
+  if (db && activeDbPath !== dbPath) {
+    db.close();
+    db = null;
+    activeDbPath = null;
+  }
+
   if (!db) {
-    const dir = path.dirname(DB_PATH);
+    const dir = path.dirname(dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    db = new Database(DB_PATH);
+    db = new Database(dbPath);
+    activeDbPath = dbPath;
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
@@ -41,4 +54,16 @@ function getDb() {
   return db;
 }
 
-module.exports = { getDb, DB_PATH };
+function checkDbHealth() {
+  getDb().prepare('SELECT 1 AS ok').get();
+}
+
+function resetDb() {
+  if (db) {
+    db.close();
+    db = null;
+    activeDbPath = null;
+  }
+}
+
+module.exports = { getDb, getDbPath, checkDbHealth, resetDb };

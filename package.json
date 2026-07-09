@@ -7,13 +7,14 @@
     "start": "NODE_ENV=production node server/server.js",
     "dev:server": "nodemon server/server.js",
     "dev:client": "PORT=8080 react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "node --test server/test/*.test.js"
   },
   "author": "Andy Wong",
   "license": "MIT",
   "proxy": "http://localhost:3000/",
   "dependencies": {
-    "axios": "^0.18.0",
+    "axios": "^0.21.4",
     "better-sqlite3": "^11.10.0",
     "body-parser": "^1.18.2",
     "elo-rank": "^1.0.3",
@@ -24,6 +25,7 @@
     "uuid": "^3.2.1"
   },
   "devDependencies": {
-    "nodemon": "^1.17.4"
+    "nodemon": "^1.17.4",
+    "supertest": "^7.0.0"
   }
 }

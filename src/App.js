@@ -2,6 +2,12 @@ import React, { Component } from 'react';
 import axios from 'axios';
 import './App.css';
 
+const api = axios.create();
+
+if (process.env.REACT_APP_API_KEY) {
+  api.defaults.headers.common['x-api-key'] = process.env.REACT_APP_API_KEY;
+}
+
 const TABS = {
   LEADERBOARD: 'leaderboard',
   LOG_MATCH: 'log-match',
@@ -38,8 +44,8 @@ class App extends Component {
     this.setState({ loading: true, error: '' });
 
     return Promise.all([
-      axios.get('/api/players'),
-      axios.get('/api/matches')
+      api.get('/api/players'),
+      api.get('/api/matches')
     ])
       .then(([playersRes, matchesRes]) => {
         this.setState({
@@ -73,7 +79,7 @@ class App extends Component {
       return;
     }
 
-    axios.post('/api/players', { name })
+    api.post('/api/players', { name })
       .then((res) => {
         this.setState({ playerName: '' });
         this.setStatus(res.data.message);
@@ -94,7 +100,7 @@ class App extends Component {
     const losers = [loser1, loser2].filter(Boolean);
     const selected = [winner1, winner2, loser1, loser2].filter(Boolean);
 
-    if (selected.length < 2) {
+    if (winners.length === 0 || losers.length === 0) {
       this.setStatus('', 'Select at least one player on each team');
       return;
     }
@@ -104,7 +110,7 @@ class App extends Component {
       return;
     }
 
-    axios.post('/api/game', { winners, losers })
+    api.post('/api/game', { winners, losers })
       .then((res) => {
         this.setState({
           winner1: '',
