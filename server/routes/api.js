@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const uuid = require('uuid/v1');
 
-const Match = require('../core/Match');
 const Player = require('../core/Player');
 const Game = require('../core/Game');
 const { serializePlayer, serializeMatch } = require('../serializers');
@@ -94,17 +93,7 @@ router.post('/game', (req, res) => {
     return;
   }
 
-  const payload = game.handleXMatches({ winners: winnersFound, losers: losersFound });
-  const newMatch = new Match(
-    uuid(),
-    payload.date,
-    payload.delta,
-    payload.probability,
-    payload.winners,
-    payload.losers
-  );
-
-  game.addRecentMatch(newMatch);
+  const newMatch = game.recordMatch(winnersFound, losersFound);
 
   res.status(201).json({
     message: 'Match ratings updated',

@@ -18,9 +18,13 @@ CREATE TABLE IF NOT EXISTS match_players (
   match_id TEXT NOT NULL,
   player_id TEXT NOT NULL,
   side TEXT NOT NULL CHECK (side IN ('winner', 'loser')),
+  win_ratio INTEGER NOT NULL,
+  wins INTEGER NOT NULL,
+  losses INTEGER NOT NULL,
   PRIMARY KEY (match_id, player_id),
   FOREIGN KEY (match_id) REFERENCES matches(id),
   FOREIGN KEY (player_id) REFERENCES players(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at DESC);
+CREATE INDEX IF NOT EXISTS idx_match_players_match_id ON match_players(match_id);

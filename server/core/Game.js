@@ -1,11 +1,14 @@
+const uuid = require('uuid/v1');
+
 const FoosballRatingCalculator = require('../libs/FoosballRatingCalculator');
+const Match = require('./Match');
 const playerRepo = require('../db/playerRepo');
 const matchRepo = require('../db/matchRepo');
 
 const ratingCalculator = new FoosballRatingCalculator();
 
 class Game {
-  handleXMatches(players) {
+  calculateMatchRatings(players) {
     const winners = players.winners;
     const losers = players.losers;
 
@@ -19,14 +22,12 @@ class Game {
       const updatedWinRatio = ratingCalculator.calculatePlayerWinRatio(winner.getWinRatio(), delta, 1);
       winner.updateWinRatio(updatedWinRatio);
       winner.recordWin();
-      playerRepo.update(winner);
     });
 
     losers.forEach((loser) => {
       const updatedWinRatio = ratingCalculator.calculatePlayerWinRatio(loser.getWinRatio(), delta, 0);
       loser.updateWinRatio(updatedWinRatio);
       loser.recordLoss();
-      playerRepo.update(loser);
     });
 
     return {
@@ -38,12 +39,23 @@ class Game {
     };
   }
 
-  addNewPlayer(newPlayer) {
-    playerRepo.insert(newPlayer);
+  recordMatch(winners, losers) {
+    const payload = this.calculateMatchRatings({ winners, losers });
+    const match = new Match(
+      uuid(),
+      payload.date,
+      payload.delta,
+      payload.probability,
+      payload.winners,
+      payload.losers
+    );
+
+    matchRepo.recordMatch(match);
+    return match;
   }
 
-  addRecentMatch(recentMatch) {
-    matchRepo.insertMatch(recentMatch);
+  addNewPlayer(newPlayer) {
+    playerRepo.insert(newPlayer);
   }
 
   getMatchesList() {
