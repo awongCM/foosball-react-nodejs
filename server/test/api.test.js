@@ -6,7 +6,10 @@ const path = require('path');
 const request = require('supertest');
 
 const { createApp } = require('../app');
-const { resetDb, getDbPath } = require('../db/db');
+const { resetDb, getDbPath, getDb } = require('../db/db');
+const Match = require('../core/Match');
+const Player = require('../core/Player');
+const { persistMatch } = require('../db/matchRepo');
 
 let app;
 let tempDir;
@@ -33,6 +36,7 @@ after(() => {
   }
   delete process.env.DB_PATH;
   delete process.env.API_KEY;
+  delete process.env.NODE_ENV;
 });
 
 beforeEach(() => {
@@ -160,4 +164,108 @@ test('match write persists players and match atomically', async () => {
 
   const matchesResponse = await request(app).get('/api/matches').expect(200);
   assert.equal(matchesResponse.body.payload.matches.length, 1);
+});
+
+test('health returns 503 when database is unavailable', async () => {
+  resetDb();
+  process.env.DB_PATH = '/proc/version';
+  app = createApp();
+
+  const response = await request(app).get('/api/health');
+
+  assert.equal(response.status, 503);
+  assert.equal(response.body.db, 'unavailable');
+
+  resetDb();
+  process.env.DB_PATH = path.join(tempDir, 'test.db');
+  app = createApp();
+});
+
+test('unknown GET /api routes return JSON 404 in production', async () => {
+  process.env.NODE_ENV = 'production';
+  app = createApp();
+
+  const response = await request(app).get('/api/nonexistent');
+
+  assert.equal(response.status, 404);
+  assert.match(response.headers['content-type'], /json/);
+  assert.equal(response.body.message, 'API route not found');
+
+  delete process.env.NODE_ENV;
+  app = createApp();
+});
+
+test('blocks write routes in production when API_KEY is not configured', async () => {
+  process.env.NODE_ENV = 'production';
+  app = createApp();
+
+  const response = await request(app).post('/api/players').send({ name: 'Alice' });
+
+  assert.equal(response.status, 503);
+  assert.match(response.body.message, /API_KEY/);
+
+  delete process.env.NODE_ENV;
+  app = createApp();
+});
+
+test('rejects teams larger than two players', async () => {
+  for (const name of ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve']) {
+    await request(app).post('/api/players').send({ name }).expect(201);
+  }
+
+  const response = await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice', 'Bob', 'Charlie'], losers: ['Dave', 'Eve'] })
+    .expect(400);
+
+  assert.match(response.body.message, /at most 2 players/);
+});
+
+test('concurrent match writes apply both rating updates', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  const [firstResponse, secondResponse] = await Promise.all([
+    request(app).post('/api/game').send({ winners: ['Alice'], losers: ['Bob'] }),
+    request(app).post('/api/game').send({ winners: ['Alice'], losers: ['Bob'] })
+  ]);
+
+  assert.equal(firstResponse.status, 201);
+  assert.equal(secondResponse.status, 201);
+
+  const playersResponse = await request(app).get('/api/players').expect(200);
+  const alice = playersResponse.body.payload.players.find((player) => player.name === 'Alice');
+  const bob = playersResponse.body.payload.players.find((player) => player.name === 'Bob');
+
+  assert.equal(alice.wins, 2);
+  assert.equal(bob.losses, 2);
+  assert.ok(alice.winRatio > 1016, 'both match rating updates should apply');
+  assert.ok(bob.winRatio < 984, 'both match rating updates should apply');
+
+  const matchesResponse = await request(app).get('/api/matches').expect(200);
+  assert.equal(matchesResponse.body.payload.matches.length, 2);
+});
+
+test('rolls back player updates when match persist fails', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  const playersBefore = await request(app).get('/api/players').expect(200);
+  const aliceBefore = playersBefore.body.payload.players.find((player) => player.name === 'Alice');
+
+  const winners = [new Player('missing-player-id', 'Ghost', 1000)];
+  const losers = [new Player(aliceBefore.id, 'Alice', 1016, 1, 0)];
+  const match = new Match('forced-failure-match', new Date(), 16, 0.5, winners, losers);
+
+  assert.throws(() => {
+    getDb().transaction(() => {
+      persistMatch(getDb(), match);
+    })();
+  });
+
+  const playersAfter = await request(app).get('/api/players').expect(200);
+  const aliceAfter = playersAfter.body.payload.players.find((player) => player.name === 'Alice');
+
+  assert.equal(aliceAfter.winRatio, aliceBefore.winRatio);
+  assert.equal(aliceAfter.wins, aliceBefore.wins);
 });

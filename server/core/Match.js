@@ -6,8 +6,6 @@ class Match {
     this._probability = _probability;
     this._winners = winners;
     this._losers = losers;
-
-    console.log('Match object initialized');
   }
 
   setDateOfEntry(date) {

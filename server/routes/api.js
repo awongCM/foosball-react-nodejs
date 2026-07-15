@@ -8,6 +8,7 @@ const { serializePlayer, serializeMatch } = require('../serializers');
 const { checkDbHealth } = require('../db/db');
 const { requireApiKey } = require('../middleware/auth');
 const { handleRoute } = require('../middleware/errorHandler');
+const { MAX_PLAYERS_PER_TEAM, MAX_PLAYER_NAME_LENGTH } = require('../constants');
 
 const WINRATIO_DEFAULT = 1000;
 const game = new Game();
@@ -41,6 +42,11 @@ router.post('/players', requireApiKey, handleRoute((req, res) => {
 
   if (!name) {
     res.status(400).json({ message: 'Player name is required' });
+    return;
+  }
+
+  if (name.length > MAX_PLAYER_NAME_LENGTH) {
+    res.status(400).json({ message: `Player name must be at most ${MAX_PLAYER_NAME_LENGTH} characters` });
     return;
   }
 
@@ -78,34 +84,12 @@ router.post('/game', requireApiKey, handleRoute((req, res) => {
     return;
   }
 
-  if (game.getPlayersList().length === 0) {
-    res.status(400).json({ message: 'Cannot determine the match ratings at this time' });
+  if (winnernames.length > MAX_PLAYERS_PER_TEAM || losernames.length > MAX_PLAYERS_PER_TEAM) {
+    res.status(400).json({ message: `Each team can have at most ${MAX_PLAYERS_PER_TEAM} players` });
     return;
   }
 
-  const winnersFound = winnernames.map((name) => game.findPlayerByName(name.trim()));
-  const losersFound = losernames.map((name) => game.findPlayerByName(name.trim()));
-
-  const missingWinners = winnernames.filter((name, index) => !winnersFound[index]);
-  const missingLosers = losernames.filter((name, index) => !losersFound[index]);
-
-  if (missingWinners.length > 0 || missingLosers.length > 0) {
-    res.status(400).json({
-      message: 'Cannot determine the match ratings due to unavailable player data',
-      missingPlayers: [...missingWinners, ...missingLosers]
-    });
-    return;
-  }
-
-  const allSelected = [...winnersFound, ...losersFound];
-  const uniqueIds = new Set(allSelected.map((player) => player.getID()));
-
-  if (uniqueIds.size !== allSelected.length) {
-    res.status(400).json({ message: 'Each player can only appear once in a match' });
-    return;
-  }
-
-  const newMatch = game.recordMatch(winnersFound, losersFound);
+  const newMatch = game.recordMatchByNames(winnernames, losernames);
 
   res.status(201).json({
     message: 'Match ratings updated',

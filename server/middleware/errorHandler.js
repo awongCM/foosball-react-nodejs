@@ -13,6 +13,14 @@ function isUniqueConstraintError(err) {
 }
 
 function errorHandler(err, req, res, next) {
+  if (err && err.code === 'VALIDATION_ERROR') {
+    res.status(400).json({
+      message: err.message,
+      ...(err.details || {})
+    });
+    return;
+  }
+
   if (isUniqueConstraintError(err)) {
     res.status(409).json({ message: 'A record with that value already exists' });
     return;

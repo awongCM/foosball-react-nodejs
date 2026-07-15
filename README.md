@@ -58,7 +58,7 @@ The Express server serves the React build and API on one port.
 
 ## Optional API protection
 
-Set `API_KEY` to require authentication on write routes (`POST /api/players`, `POST /api/game`). Send the key via:
+Set `API_KEY` to require authentication on write routes (`POST /api/players`, `POST /api/game`). In production, write routes are blocked until `API_KEY` is configured. Send the key via:
 
 - `x-api-key: your-secret-key`, or
 - `Authorization: Bearer your-secret-key`

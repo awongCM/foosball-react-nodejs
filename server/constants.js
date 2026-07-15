@@ -1,0 +1,11 @@
+const MAX_PLAYERS_PER_TEAM = 2;
+const MAX_PLAYER_NAME_LENGTH = 50;
+const RATING_MIN = 0;
+const RATING_MAX = 3000;
+
+module.exports = {
+  MAX_PLAYERS_PER_TEAM,
+  MAX_PLAYER_NAME_LENGTH,
+  RATING_MIN,
+  RATING_MAX
+};

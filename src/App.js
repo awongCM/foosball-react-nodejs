@@ -106,13 +106,21 @@ class App extends Component {
 
     api.post('/api/game', { winners, losers })
       .then((res) => {
+        const match = res.data.payload;
+        const winnerSummary = match.winners
+          .map((player) => `${player.name} → ${player.winRatio}`)
+          .join(', ');
+        const loserSummary = match.losers
+          .map((player) => `${player.name} → ${player.winRatio}`)
+          .join(', ');
+
         this.setState({
           winner1: '',
           winner2: '',
           loser1: '',
           loser2: ''
         });
-        this.setStatus(res.data.message);
+        this.setStatus(`Match logged (±${match.delta}). Winners: ${winnerSummary}. Losers: ${loserSummary}.`);
         return this.loadData();
       })
       .catch((err) => {

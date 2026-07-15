@@ -2,8 +2,7 @@ const { getDb } = require('./db');
 const Match = require('../core/Match');
 const Player = require('../core/Player');
 
-function recordMatch(match) {
-  const db = getDb();
+function persistMatch(db, match) {
   const updatePlayerStmt = db.prepare(
     'UPDATE players SET win_ratio = ?, wins = ?, losses = ? WHERE id = ?'
   );
@@ -19,36 +18,39 @@ function recordMatch(match) {
     ...match.getLosers().map((player) => ({ player, side: 'loser' }))
   ];
 
-  const tx = db.transaction(() => {
-    participants.forEach(({ player }) => {
-      updatePlayerStmt.run(
-        player.getWinRatio(),
-        player.getWins(),
-        player.getLosses(),
-        player.getID()
-      );
-    });
-
-    insertMatchStmt.run(
-      match.getID(),
-      match.getDateOfEntry().toISOString(),
-      match.getDelta(),
-      match.getProbability()
+  participants.forEach(({ player }) => {
+    updatePlayerStmt.run(
+      player.getWinRatio(),
+      player.getWins(),
+      player.getLosses(),
+      player.getID()
     );
-
-    participants.forEach(({ player, side }) => {
-      insertParticipantStmt.run(
-        match.getID(),
-        player.getID(),
-        side,
-        player.getWinRatio(),
-        player.getWins(),
-        player.getLosses()
-      );
-    });
   });
 
-  tx();
+  insertMatchStmt.run(
+    match.getID(),
+    match.getDateOfEntry().toISOString(),
+    match.getDelta(),
+    match.getProbability()
+  );
+
+  participants.forEach(({ player, side }) => {
+    insertParticipantStmt.run(
+      match.getID(),
+      player.getID(),
+      side,
+      player.getWinRatio(),
+      player.getWins(),
+      player.getLosses()
+    );
+  });
+}
+
+function recordMatch(match) {
+  const db = getDb();
+  db.transaction(() => {
+    persistMatch(db, match);
+  })();
 }
 
 function findAll() {
@@ -91,4 +93,4 @@ function findAll() {
   });
 }
 
-module.exports = { recordMatch, findAll };
+module.exports = { recordMatch, persistMatch, findAll };

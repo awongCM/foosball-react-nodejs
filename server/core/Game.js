@@ -4,6 +4,8 @@ const FoosballRatingCalculator = require('../libs/FoosballRatingCalculator');
 const Match = require('./Match');
 const playerRepo = require('../db/playerRepo');
 const matchRepo = require('../db/matchRepo');
+const { getDb } = require('../db/db');
+const { ValidationError } = require('../errors');
 
 const ratingCalculator = new FoosballRatingCalculator();
 
@@ -39,19 +41,47 @@ class Game {
     };
   }
 
-  recordMatch(winners, losers) {
-    const payload = this.calculateMatchRatings({ winners, losers });
-    const match = new Match(
-      uuid(),
-      payload.date,
-      payload.delta,
-      payload.probability,
-      payload.winners,
-      payload.losers
-    );
+  recordMatchByNames(rawWinnerNames, rawLoserNames) {
+    const winnerNames = rawWinnerNames.map((name) => name.trim());
+    const loserNames = rawLoserNames.map((name) => name.trim());
 
-    matchRepo.recordMatch(match);
-    return match;
+    const db = getDb();
+    const record = db.transaction(() => {
+      const winners = winnerNames.map((name) => playerRepo.findByName(name, db));
+      const losers = loserNames.map((name) => playerRepo.findByName(name, db));
+
+      const missingWinners = winnerNames.filter((name, index) => !winners[index]);
+      const missingLosers = loserNames.filter((name, index) => !losers[index]);
+
+      if (missingWinners.length > 0 || missingLosers.length > 0) {
+        throw new ValidationError(
+          'Cannot determine the match ratings due to unavailable player data',
+          { missingPlayers: [...missingWinners, ...missingLosers] }
+        );
+      }
+
+      const allSelected = [...winners, ...losers];
+      const uniqueIds = new Set(allSelected.map((player) => player.getID()));
+
+      if (uniqueIds.size !== allSelected.length) {
+        throw new ValidationError('Each player can only appear once in a match');
+      }
+
+      const payload = this.calculateMatchRatings({ winners, losers });
+      const match = new Match(
+        uuid(),
+        payload.date,
+        payload.delta,
+        payload.probability,
+        payload.winners,
+        payload.losers
+      );
+
+      matchRepo.persistMatch(db, match);
+      return match;
+    });
+
+    return record();
   }
 
   addNewPlayer(newPlayer) {

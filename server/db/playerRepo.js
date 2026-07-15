@@ -10,13 +10,13 @@ function findAll() {
   return rows.map(rowToPlayer);
 }
 
-function findByName(name) {
-  const row = getDb().prepare('SELECT * FROM players WHERE name = ? COLLATE NOCASE').get(name);
+function findByName(name, db = getDb()) {
+  const row = db.prepare('SELECT * FROM players WHERE name = ? COLLATE NOCASE').get(name);
   return row ? rowToPlayer(row) : null;
 }
 
-function findById(id) {
-  const row = getDb().prepare('SELECT * FROM players WHERE id = ?').get(id);
+function findById(id, db = getDb()) {
+  const row = db.prepare('SELECT * FROM players WHERE id = ?').get(id);
   return row ? rowToPlayer(row) : null;
 }
 

@@ -16,10 +16,18 @@ function createApp() {
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(buildPath));
 
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(buildPath, 'index.html'));
+    app.get(/^(?!\/api(\/|$)).*/, (req, res, next) => {
+      res.sendFile(path.join(buildPath, 'index.html'), (err) => {
+        if (err) {
+          next(err);
+        }
+      });
     });
   }
+
+  app.use('/api', (req, res) => {
+    res.status(404).json({ message: 'API route not found' });
+  });
 
   app.use(errorHandler);
   return app;

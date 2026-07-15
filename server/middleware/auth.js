@@ -1,5 +1,11 @@
 function requireApiKey(req, res, next) {
   const apiKey = process.env.API_KEY;
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction && !apiKey) {
+    res.status(503).json({ message: 'Write access is disabled until API_KEY is configured' });
+    return;
+  }
 
   if (!apiKey) {
     next();

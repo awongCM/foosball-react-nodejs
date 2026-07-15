@@ -1,14 +1,13 @@
 // Source: https://www.npmjs.com/package/elo-rank
 // For more info about the formula used here, go to https://en.wikipedia.org/wiki/Elo_rating_system
 const elo = require('elo-rank');
+const { RATING_MIN, RATING_MAX } = require('../constants');
 
 const KCOEFFICIENT_BASE = 32;
 
 class FoosballRatingCalculator {
   constructor() {
     this._elo = new elo(KCOEFFICIENT_BASE);
-
-    console.log('FoosBallRatingCalculator initialized');
   }
   
   getExpectedScore(winnerRatio, loserRatio, kFactor) {
@@ -23,7 +22,8 @@ class FoosballRatingCalculator {
 
   // basically the same idea as updatePlayerRating method above but it's bluntly more simplistic than the former approach
   calculatePlayerWinRatio(playerWinRatio, delta, didWin) {
-    return (didWin) ? playerWinRatio + delta : playerWinRatio - delta;
+    const updated = (didWin) ? playerWinRatio + delta : playerWinRatio - delta;
+    return Math.max(RATING_MIN, Math.min(RATING_MAX, updated));
   }
 
   calculateAverageElo(players) {
