@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const uuid = require('uuid/v1');
+const { v1: uuid } = require('uuid');
 
 const Player = require('../core/Player');
 const Game = require('../core/Game');
