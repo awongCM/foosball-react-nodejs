@@ -2,28 +2,35 @@
   "name": "foosball-react-nodejs",
   "version": "1.0.0",
   "description": "Foosball Ranking System in React/NodeJS",
-  "main": "app.js",
+  "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "watch": "nodemon server/server.js",
-    "serve": "PORT=8080 react-scripts start"
+    "start": "NODE_ENV=production node server/server.js",
+    "dev:server": "nodemon server/server.js",
+    "dev:client": "PORT=8080 react-scripts start",
+    "build": "react-scripts build",
+    "test": "node --test server/test/*.test.js"
   },
   "author": "Andy Wong",
   "license": "MIT",
   "proxy": "http://localhost:3000/",
   "dependencies": {
-    "axios": "^0.18.0",
+    "better-sqlite3": "^11.10.0",
     "body-parser": "^1.18.2",
     "elo-rank": "^1.0.3",
     "express": "^4.16.3",
     "react": "^16.3.2",
     "react-dom": "^16.3.2",
-    "react-json-view": "^1.16.6",
     "react-scripts": "^1.1.4",
-    "uuid": "^3.2.1"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "nodemon": "^1.17.4",
-    "yarn": "^1.6.0"
+    "supertest": "^7.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "request": {
+      "form-data": "2.5.6"
+    }
   }
 }

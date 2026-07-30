@@ -1,0 +1,271 @@
+const { test, before, after, beforeEach } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const request = require('supertest');
+
+const { createApp } = require('../app');
+const { resetDb, getDbPath, getDb } = require('../db/db');
+const Match = require('../core/Match');
+const Player = require('../core/Player');
+const { persistMatch } = require('../db/matchRepo');
+
+let app;
+let tempDir;
+
+function removeDbFiles(dbPath) {
+  for (const suffix of ['', '-wal', '-shm']) {
+    const file = `${dbPath}${suffix}`;
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  }
+}
+
+before(() => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'foosball-test-'));
+  process.env.DB_PATH = path.join(tempDir, 'test.db');
+});
+
+after(() => {
+  resetDb();
+  removeDbFiles(getDbPath());
+  if (tempDir && fs.existsSync(tempDir)) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+  delete process.env.DB_PATH;
+  delete process.env.API_KEY;
+  delete process.env.NODE_ENV;
+});
+
+beforeEach(() => {
+  delete process.env.API_KEY;
+  resetDb();
+  removeDbFiles(getDbPath());
+  app = createApp();
+});
+
+test('health check verifies database connectivity', async () => {
+  const response = await request(app).get('/api/health');
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.status, 'ok');
+  assert.equal(response.body.db, 'ok');
+});
+
+test('match history keeps snapshot ratings after later matches', async () => {
+  for (const name of ['Alice', 'Bob', 'Charlie', 'Dave']) {
+    await request(app).post('/api/players').send({ name }).expect(201);
+  }
+
+  await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice', 'Bob'], losers: ['Charlie', 'Dave'] })
+    .expect(201);
+
+  await request(app)
+    .post('/api/game')
+    .send({ winners: ['Charlie', 'Dave'], losers: ['Alice', 'Bob'] })
+    .expect(201);
+
+  const matchesResponse = await request(app).get('/api/matches').expect(200);
+  const matches = matchesResponse.body.payload.matches;
+
+  assert.equal(matches.length, 2);
+
+  const firstMatch = matches[1];
+  const aliceInFirstMatch = firstMatch.winners.find((player) => player.name === 'Alice');
+
+  assert.equal(aliceInFirstMatch.winRatio, 1008);
+
+  const playersResponse = await request(app).get('/api/players').expect(200);
+  const aliceCurrent = playersResponse.body.payload.players.find((player) => player.name === 'Alice');
+
+  assert.equal(aliceCurrent.winRatio, 1000);
+  assert.notEqual(aliceInFirstMatch.winRatio, aliceCurrent.winRatio);
+});
+
+test('rejects matches with missing players', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+
+  const response = await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice'], losers: ['Nobody'] })
+    .expect(400);
+
+  assert.match(response.body.message, /unavailable player data/);
+});
+
+test('rejects duplicate players in the same match', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  const response = await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice'], losers: ['Alice'] })
+    .expect(400);
+
+  assert.match(response.body.message, /once in a match/);
+});
+
+test('rejects duplicate player names', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+
+  const response = await request(app)
+    .post('/api/players')
+    .send({ name: 'alice' })
+    .expect(409);
+
+  assert.match(response.body.message, /already exists/);
+});
+
+test('rejects invalid winratio values', async () => {
+  const response = await request(app)
+    .post('/api/players')
+    .send({ name: 'Alice', winratio: -5 })
+    .expect(400);
+
+  assert.match(response.body.message, /winratio must be a number/);
+});
+
+test('requires API key for write routes when configured', async () => {
+  process.env.API_KEY = 'test-secret-key';
+  app = createApp();
+
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(401);
+
+  await request(app)
+    .post('/api/players')
+    .set('x-api-key', 'test-secret-key')
+    .send({ name: 'Alice' })
+    .expect(201);
+
+  await request(app).get('/api/players').expect(200);
+});
+
+test('match write persists players and match atomically', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice'], losers: ['Bob'] })
+    .expect(201);
+
+  const playersResponse = await request(app).get('/api/players').expect(200);
+  const alice = playersResponse.body.payload.players.find((player) => player.name === 'Alice');
+  const bob = playersResponse.body.payload.players.find((player) => player.name === 'Bob');
+
+  assert.equal(alice.winRatio, 1016);
+  assert.equal(bob.winRatio, 984);
+  assert.equal(alice.wins, 1);
+  assert.equal(bob.losses, 1);
+
+  const matchesResponse = await request(app).get('/api/matches').expect(200);
+  assert.equal(matchesResponse.body.payload.matches.length, 1);
+});
+
+test('health returns 503 when database is unavailable', async () => {
+  resetDb();
+  process.env.DB_PATH = '/proc/version';
+  app = createApp();
+
+  const response = await request(app).get('/api/health');
+
+  assert.equal(response.status, 503);
+  assert.equal(response.body.db, 'unavailable');
+
+  resetDb();
+  process.env.DB_PATH = path.join(tempDir, 'test.db');
+  app = createApp();
+});
+
+test('unknown GET /api routes return JSON 404 in production', async () => {
+  process.env.NODE_ENV = 'production';
+  app = createApp();
+
+  const response = await request(app).get('/api/nonexistent');
+
+  assert.equal(response.status, 404);
+  assert.match(response.headers['content-type'], /json/);
+  assert.equal(response.body.message, 'API route not found');
+
+  delete process.env.NODE_ENV;
+  app = createApp();
+});
+
+test('blocks write routes in production when API_KEY is not configured', async () => {
+  process.env.NODE_ENV = 'production';
+  app = createApp();
+
+  const response = await request(app).post('/api/players').send({ name: 'Alice' });
+
+  assert.equal(response.status, 503);
+  assert.match(response.body.message, /API_KEY/);
+
+  delete process.env.NODE_ENV;
+  app = createApp();
+});
+
+test('rejects teams larger than two players', async () => {
+  for (const name of ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve']) {
+    await request(app).post('/api/players').send({ name }).expect(201);
+  }
+
+  const response = await request(app)
+    .post('/api/game')
+    .send({ winners: ['Alice', 'Bob', 'Charlie'], losers: ['Dave', 'Eve'] })
+    .expect(400);
+
+  assert.match(response.body.message, /at most 2 players/);
+});
+
+test('concurrent match writes apply both rating updates', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  const [firstResponse, secondResponse] = await Promise.all([
+    request(app).post('/api/game').send({ winners: ['Alice'], losers: ['Bob'] }),
+    request(app).post('/api/game').send({ winners: ['Alice'], losers: ['Bob'] })
+  ]);
+
+  assert.equal(firstResponse.status, 201);
+  assert.equal(secondResponse.status, 201);
+
+  const playersResponse = await request(app).get('/api/players').expect(200);
+  const alice = playersResponse.body.payload.players.find((player) => player.name === 'Alice');
+  const bob = playersResponse.body.payload.players.find((player) => player.name === 'Bob');
+
+  assert.equal(alice.wins, 2);
+  assert.equal(bob.losses, 2);
+  assert.ok(alice.winRatio > 1016, 'both match rating updates should apply');
+  assert.ok(bob.winRatio < 984, 'both match rating updates should apply');
+
+  const matchesResponse = await request(app).get('/api/matches').expect(200);
+  assert.equal(matchesResponse.body.payload.matches.length, 2);
+});
+
+test('rolls back player updates when match persist fails', async () => {
+  await request(app).post('/api/players').send({ name: 'Alice' }).expect(201);
+  await request(app).post('/api/players').send({ name: 'Bob' }).expect(201);
+
+  const playersBefore = await request(app).get('/api/players').expect(200);
+  const aliceBefore = playersBefore.body.payload.players.find((player) => player.name === 'Alice');
+
+  const winners = [new Player('missing-player-id', 'Ghost', 1000)];
+  const losers = [new Player(aliceBefore.id, 'Alice', 1016, 1, 0)];
+  const match = new Match('forced-failure-match', new Date(), 16, 0.5, winners, losers);
+
+  assert.throws(() => {
+    getDb().transaction(() => {
+      persistMatch(getDb(), match);
+    })();
+  });
+
+  const playersAfter = await request(app).get('/api/players').expect(200);
+  const aliceAfter = playersAfter.body.payload.players.find((player) => player.name === 'Alice');
+
+  assert.equal(aliceAfter.winRatio, aliceBefore.winRatio);
+  assert.equal(aliceAfter.wins, aliceBefore.wins);
+});

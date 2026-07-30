@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: foosball-rankings
+    runtime: node
+    buildCommand: npm install && npm run build && npm test
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: foosball-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /data/foosball.db
+      - key: NODE_ENV
+        value: production
+      - key: API_KEY
+        sync: false
+      - key: REACT_APP_API_KEY
+        sync: false

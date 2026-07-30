@@ -1,75 +1,89 @@
 # foosball-react-nodejs
 
-Foosball Ranking System written entirely in NodeJS/React
+Foosball ranking system for tracking 2v2 office matches with Elo-style ratings.
 
-Ingredient used to make this system:
-* NodeJS
-* ExpressJS (for API JSON request/response)
-* React
-* Elo-rank
-* UUID
-* POJOs
-* YARN/NPM
+## Stack
 
-## Instructons to setup and run
-1. Download the repo.
-2. Navigate to the project root folder, run `npm install` or `npm i`.
-3. To start up API webserice, type `yarn start`.
-4. To serve front end app, type `yarn serve`.
+- Node.js + Express API
+- React frontend (uses native `fetch` for API calls)
+- SQLite persistence (`better-sqlite3`)
+- Elo rating calculations via `elo-rank`
 
-## Backend API endpoints provided
+## Local development
 
-### 1. `players` with get/post verbs.
+1. Install dependencies:
 
-#### GET with no request body.
-*Response Payload:* A list of all players is returned.
-
-#### POST with the following request body.
-
+```bash
+npm install
 ```
-{
-  "name": <player name>
-}
+
+2. Start the API (port 3000):
+
+```bash
+npm run dev:server
 ```
-*Response Payload:* A new player is successfully entered in the system.
 
-### 2. `game` with post verb.
+3. In another terminal, start the React dev server (port 8080):
 
-#### POST with the following request body.
-
+```bash
+npm run dev:client
 ```
-{
-  "winners": [
-    <player 1 name>,
-    <player 2 name>,
-  ],
-  "losers": [
-    <player 3 name>,
-    <player 4 name>,
-  ]
-}
+
+Open `http://localhost:8080`. The React dev server proxies API requests to port 3000.
+
+Local SQLite data is stored at `./data/foosball.db`.
+
+## Tests
+
+```bash
+npm test
 ```
-*Response Payload:* A new match with paired opponents is created; and their respective opponents' win ratios are calculated and returned.
 
-### 3. `matches` with get verbs.
+## Production build
 
-#### GET with no request body.
+```bash
+npm run build
+NODE_ENV=production npm start
+```
 
-*Response Payload:* A list of all recent played matches is returned.
+The Express server serves the React build and API on one port.
 
-## Front end React UI component provided
-An interface to view the JSON payload message when interacting with the API services.
+## API endpoints
 
-![alt text](/React_App.png)
+- `GET /api/health` — health check (includes database connectivity)
+- `GET /api/players` — list players (sorted by rating)
+- `POST /api/players` — add a player `{ "name": "Alice" }`
+- `POST /api/game` — log a match `{ "winners": ["Alice", "Bob"], "losers": ["Charlie", "Dave"] }`
+- `GET /api/matches` — list match history
 
-## TODO:
-1. To host it live in Heroku/AWS.
-2. Use a graph API to display matches over time.
-3. Replace the UI json viewer object with more useful actual form input fields.
+## Optional API protection
 
-### References
-For more information on how players ranking are determined during the games.
+Set `API_KEY` to require authentication on write routes (`POST /api/players`, `POST /api/game`). In production, write routes are blocked until `API_KEY` is configured. Send the key via:
 
-https://www.npmjs.com/package/elo-rank
+- `x-api-key: your-secret-key`, or
+- `Authorization: Bearer your-secret-key`
 
-https://en.wikipedia.org/wiki/Elo_rating_system
+When deploying the bundled React UI with auth enabled, also set `REACT_APP_API_KEY` to the same value at **build time** so the browser can submit matches. Read routes remain public. Leave both unset for local development.
+
+## Deploy to Render
+
+This repo includes a [`render.yaml`](render.yaml) Blueprint with:
+
+- One web service (API + React static build)
+- Persistent disk mounted at `/data` for SQLite
+- Optional `API_KEY` secret (set in the Render Dashboard)
+
+Connect the repo in the Render Dashboard and apply the Blueprint, or run:
+
+```bash
+render blueprints validate render.yaml
+```
+
+## Rating system
+
+Player ratings use the [Elo rating system](https://en.wikipedia.org/wiki/Elo_rating_system). New players start at 1000. Team ratings are averaged before calculating the match delta.
+
+References:
+
+- https://www.npmjs.com/package/elo-rank
+- https://en.wikipedia.org/wiki/Elo_rating_system
